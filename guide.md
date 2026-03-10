@@ -480,25 +480,25 @@ export const auth = betterAuth({
 });
 ```
 
-Add the GitHub OAuth credentials to your `.env` file:
+Add the GitHub OAuth credentials to your `.env` file (you can leave them empty until the app is created):
 
 ```bash
 GITHUB_CLIENT_ID=your-github-client-id
 GITHUB_CLIENT_SECRET=your-github-client-secret
 ```
 
-To get these credentials, create an OAuth App in your [GitHub Developer Settings](https://github.com/settings/developers). Set the authorization callback URL to `http://localhost:3000/api/auth/callback/github`.
+To get these credentials, create an OAuth App in your [GitHub Developer Settings](https://github.com/settings/developers). Set the **Authorization callback URL** to `http://localhost:3000/api/auth/callback/github`. Until these are set, the “Continue with GitHub” button will redirect to GitHub but the callback will fail; the email/password flow is unaffected.
 
 ### Client Usage
 
-Add a social sign-in button to your login page using Nuxt UI's `UButton` with an icon. You can place it above or below the email form inside the same `UCard`:
+Add a social sign-in button to your login page (and optionally the register page) using Nuxt UI's `UButton`. Place it above the email/password form with a visual “or” divider so users can choose GitHub or email. For OAuth, `callbackURL` is correct — it’s where users land after GitHub redirects back (unlike email/password, where you use `navigateTo` on success).
 
 ```html
 <script setup lang="ts">
   import { authClient } from "~/lib/auth-client";
 
-  async function signInWithGitHub() {
-    await authClient.signIn.social({
+  function signInWithGitHub() {
+    authClient.signIn.social({
       provider: "github",
       callbackURL: "/dashboard",
     });
@@ -506,20 +506,34 @@ Add a social sign-in button to your login page using Nuxt UI's `UButton` with an
 </script>
 
 <template>
+  <!-- Inside your UCard, above the email form: -->
   <UButton
     block
     color="neutral"
     variant="outline"
     size="md"
-    icon="i-lucide-github"
+    icon="i-simple-icons-github"
     @click="signInWithGitHub"
   >
     Continue with GitHub
   </UButton>
+
+  <div class="relative">
+    <div class="absolute inset-0 flex items-center">
+      <span class="w-full border-t border-default" />
+    </div>
+    <div class="relative flex justify-center text-xs uppercase">
+      <span class="bg-card px-2 text-muted">or</span>
+    </div>
+  </div>
+
+  <!-- Then your existing email/password form -->
 </template>
 ```
 
-That's it. Better Auth handles the full OAuth flow — redirecting to GitHub, exchanging the authorization code for tokens, creating or linking the user account, and establishing the session.
+Use the icon `i-simple-icons-github` (GitHub logo from [Simple Icons](https://icon-sets.iconify.design/simple-icons/)); if you use [Lucide](https://icon-sets.iconify.design/lucide/) (`npm i -D @iconify-json/lucide`), you can use `i-lucide-github` instead.
+
+That's it. Better Auth handles the full OAuth flow — redirecting to GitHub, exchanging the authorization code for tokens, creating or linking the user account, and establishing the session. Add the same button and `signInWithGitHub` handler to your register page so users can sign up with GitHub as well.
 
 Adding another provider like Google follows the same pattern:
 

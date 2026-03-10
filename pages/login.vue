@@ -6,6 +6,13 @@ const password = ref("");
 const error = ref("");
 const loading = ref(false);
 
+function signInWithGitHub() {
+  authClient.signIn.social({
+    provider: "github",
+    callbackURL: "/dashboard",
+  });
+}
+
 async function handleSignIn() {
   error.value = "";
   loading.value = true;
@@ -13,7 +20,6 @@ async function handleSignIn() {
   const { error: signInError } = await authClient.signIn.email({
     email: email.value,
     password: password.value,
-    callbackURL: "/dashboard",
   });
 
   if (signInError) {
@@ -33,7 +39,29 @@ async function handleSignIn() {
         <h1 class="text-xl font-semibold">Sign In</h1>
       </template>
 
-      <form class="space-y-4" @submit.prevent="handleSignIn">
+      <div class="space-y-4">
+        <UButton
+          block
+          color="neutral"
+          variant="outline"
+          size="md"
+          icon="i-simple-icons-github"
+          @click="signInWithGitHub"
+        >
+          Continue with GitHub
+        </UButton>
+
+        <div class="relative">
+          <div class="absolute inset-0 flex items-center">
+            <span class="w-full border-t border-default" />
+          </div>
+          <div class="relative flex justify-center text-xs uppercase">
+            <span class="bg-card px-2 text-muted">or</span>
+          </div>
+        </div>
+      </div>
+
+      <form class="space-y-4 mt-4" @submit.prevent="handleSignIn">
         <UAlert
           v-if="error"
           color="error"
