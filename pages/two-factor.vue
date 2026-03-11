@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { authClient } from "~/lib/auth-client";
-
 const code = ref("");
 const backupCode = ref("");
 const useBackupCode = ref(false);

@@ -1,12 +1,18 @@
 import { betterAuth } from "better-auth";
 import { twoFactor } from "better-auth/plugins";
-import Database from "better-sqlite3";
+import { LibsqlDialect } from "@libsql/kysely-libsql";
 
 const hasGitHub =
   process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET;
 
 export const auth = betterAuth({
-  database: new Database("./sqlite.db"),
+  database: {
+    dialect: new LibsqlDialect({
+      url: process.env.DATABASE_URL!,
+      authToken: process.env.DATABASE_TOKEN,
+    }),
+    type: "sqlite",
+  },
   appName: "Nuxt Better Auth",
   emailAndPassword: {
     enabled: true,

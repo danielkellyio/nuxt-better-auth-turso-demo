@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { authClient } from "~/lib/auth-client";
-
 const session = authClient.useSession();
 
 const twoFactorPassword = ref("");

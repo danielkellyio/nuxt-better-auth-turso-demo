@@ -5,7 +5,7 @@ description: Learn how to add authentication to a Nuxt application using Better 
 
 Authentication is one of those features every serious web application needs, yet it remains one of the most tedious to implement correctly. Session management, CSRF protection, secure password hashing, OAuth flows, database schema — the surface area is large, and the stakes are high.
 
-For Nuxt developers, the landscape has shifted over the past couple of years. Lucia Auth deprecated itself. Auth.js (NextAuth) has a Nuxt integration, but its callback-heavy configuration model can feel foreign in a Nuxt codebase. Meanwhile, a newer library called [Better Auth](https://better-auth.com/) has gained serious traction by offering a TypeScript-first, framework-agnostic approach with built-in support for features that other libraries treat as afterthoughts — two-factor authentication, organization management, rate limiting, and more.
+For Nuxt developers, the landscape has shifted over the past couple of years. Lucia Auth deprecated itself. Auth.js (NextAuth) has a Nuxt integration, but its callback-heavy configuration model can feel foreign in a Nuxt codebase. [Nuxt Auth utils is awesome](https://vueschool.io/courses/nuxt-auth-utils-secure-simple-and-flexible-logins), but leaves more robust features up to you. Meanwhile, a newer library called [Better Auth](https://better-auth.com/) has gained serious traction by offering a TypeScript-first, framework-agnostic approach with built-in support for features that other libraries treat as afterthoughts — two-factor authentication, organization management, rate limiting, and more.
 
 In this article, we'll walk through integrating Better Auth into a Nuxt application from scratch. By the end, you'll have working email/password authentication, social login with GitHub, SSR-safe sessions, protected routes, and a clear path to extend the setup with plugins.
 
@@ -15,7 +15,7 @@ Before diving into code, it's worth understanding what sets Better Auth apart:
 
 - **TypeScript-first**: Every API is fully typed. The client methods, server utilities, and plugin interfaces all provide strong type inference without manual type declarations.
 - **Framework-agnostic with first-class Nuxt support**: Better Auth works with any JavaScript backend, but its [Nuxt integration](https://better-auth.com/docs/integrations/nuxt) is well-documented and feels native to the framework.
-- **Plugin architecture**: Need two-factor auth? Add the `twoFactor()` plugin. Need organization/team management? There's a plugin for that too. Over 27 plugins are available, and each one extends both the server and client APIs automatically.
+- **Plugin architecture**: Need two-factor auth? [Add the `twoFactor()` plugin](https://better-auth.com/docs/plugins/2fa). Need organization/team management? [There's a plugin for that too](https://better-auth.com/docs/plugins/organization). Over 27 plugins are available, and each one extends both the server and client APIs automatically.
 - **Database flexibility**: It works with raw SQL drivers (SQLite, PostgreSQL, MySQL), ORMs like Drizzle and Prisma, or even MongoDB. An included CLI generates and runs migrations for you.
 - **Built-in security defaults**: Secure password hashing, CSRF protection, rate limiting, and session management are handled out of the box.
 
@@ -61,10 +61,6 @@ Wrap your app with `UApp` in `app.vue` so Toasts and other overlays work correct
 </template>
 ```
 
-With Nuxt UI and the root layout in place, your app will show a welcome screen with Sign In and Sign Up actions:
-
-![Welcome screen with Sign In and Sign Up buttons](./guide-images/welcome.png)
-
 Now install Better Auth and a database driver. We'll use `better-sqlite3` for simplicity — it requires zero configuration and stores everything in a local file. For production, you'd swap this for PostgreSQL, MySQL, or a cloud database like Turso.
 
 ```bash
@@ -109,6 +105,16 @@ npx @better-auth/cli migrate --config ./server/utils/auth.ts
 
 This creates the `user`, `session`, `account`, and `verification` tables. Whenever you add plugins later, re-running this command will create any additional tables they require.
 
+To codify this process, you can create a script in `package.json` to run the migration:
+
+```json
+{
+  "scripts": {
+    "better-auth:migrate": "npx @better-auth/cli migrate --config ./server/utils/auth.ts"
+  }
+}
+```
+
 If you prefer to generate a migration file instead of applying changes directly, use:
 
 ```bash
@@ -131,13 +137,15 @@ This single route handles every auth endpoint — sign-up, sign-in, sign-out, se
 
 ## Creating the Auth Client
 
-On the client side, Better Auth provides a Vue-specific client with reactive composables. Create `lib/auth-client.ts`:
+On the client side, Better Auth provides a Vue-specific client with reactive state. Create `composables/auth-client.ts`:
 
 ```typescript
 import { createAuthClient } from "better-auth/vue";
 
 export const authClient = createAuthClient();
 ```
+
+Nuxt auto-imports composables, so `authClient` is available in any component, page, or middleware without an explicit import.
 
 Since the auth server runs on the same domain, you don't need to specify a `baseURL`. The client automatically calls `/api/auth/*` endpoints.
 
@@ -149,12 +157,10 @@ export const { signIn, signUp, signOut, useSession } = createAuthClient();
 
 ## Building a Sign-Up Page
 
-Create `pages/register.vue` using Nuxt UI's `UCard`, `UFormField`, `UInput`, `UButton`, and `UAlert`:
+Create `pages/register.vue` using [Nuxt UI's](https://vueschool.io/courses/nuxt-ui-build-a-dashboard-template) `UCard`, `UFormField`, `UInput`, `UButton`, and `UAlert`:
 
 ```html
 <script setup lang="ts">
-  import { authClient } from "~/lib/auth-client";
-
   const name = ref("");
   const email = ref("");
   const password = ref("");
@@ -251,9 +257,9 @@ Create `pages/register.vue` using Nuxt UI's `UCard`, `UFormField`, `UInput`, `UB
 </template>
 ```
 
-The `signUp.email` method sends the user's credentials to the server, creates the account, hashes the password, and — by default — automatically signs the user in. After a successful sign-up, we use Nuxt's `navigateTo` to redirect to the dashboard. Note that `callbackURL` is designed for OAuth/redirect-based flows and won't trigger a client-side navigation for email/password auth — that's why we handle the redirect manually.
+The `signUp.email` method sends the user's credentials to the server, creates the account, hashes the password, and, by default, automatically signs the user in. After a successful sign-up, we use Nuxt's `navigateTo` to redirect to the dashboard. (Note that the better auth client `callbackURL` option is designed for OAuth/redirect-based flows and won't trigger a client-side navigation for email/password auth — that's why we handle the redirect manually.)
 
-![Create an Account form with Name, Email, and Password fields](./guide-images/register.png)
+![Create an Account form with Name, Email, and Password fields](./images/register.png)
 
 ## Building a Login Page
 
@@ -261,8 +267,6 @@ Create `pages/login.vue` with the same Nuxt UI patterns:
 
 ```html
 <script setup lang="ts">
-  import { authClient } from "~/lib/auth-client";
-
   const email = ref("");
   const password = ref("");
   const error = ref("");
@@ -347,7 +351,7 @@ Create `pages/login.vue` with the same Nuxt UI patterns:
 </template>
 ```
 
-![Sign In form with Email and Password fields](./guide-images/login.png)
+![Sign In form with Email and Password fields](./images/login.png)
 
 ## Working with Sessions
 
@@ -357,8 +361,6 @@ Better Auth's Vue client provides a reactive `useSession` composable that update
 
 ```html
 <script setup lang="ts">
-  import { authClient } from "~/lib/auth-client";
-
   const session = authClient.useSession();
 </script>
 
@@ -382,7 +384,7 @@ Better Auth's Vue client provides a reactive `useSession` composable that update
 
 The `useSession` composable returns a reactive object with `data` (the session and user), `isPending` (loading state), and `error` (if the session fetch failed). When the user signs out, `data` becomes `null` and your UI updates immediately.
 
-![Dashboard showing authenticated user and Sign Out button](./guide-images/dashboard.png)
+![Dashboard showing authenticated user and Sign Out button](./images/dashboard.png)
 
 ### SSR-Safe Sessions
 
@@ -390,8 +392,6 @@ If your Nuxt app uses server-side rendering, you'll want the session to be avail
 
 ```html
 <script setup lang="ts">
-  import { authClient } from "~/lib/auth-client";
-
   const { data: session } = await authClient.useSession(useFetch);
 </script>
 
@@ -400,7 +400,7 @@ If your Nuxt app uses server-side rendering, you'll want the session to be avail
 </template>
 ```
 
-This avoids the flash of unauthenticated content that happens when session data is only fetched client-side.
+[This is what the docs say anyways](https://better-auth.com/docs/integrations/nuxt#ssr-usage) however at the time of writing this article, it causes hydration errors. [See this github issue for more information](https://github.com/better-auth/better-auth/issues/5358) and a workaround.
 
 ### Server-Side Sessions
 
@@ -427,14 +427,11 @@ export default defineEventHandler(async (event) => {
 
 ## Protecting Routes with Middleware
 
-Nuxt middleware is the natural place to enforce authentication requirements. Create `middleware/auth.global.ts` for a global middleware that protects specific routes:
+Nuxt middleware is the natural place to enforce authentication requirements. Create `middleware/auth.global.ts` for a global middleware that protects specific routes. `authClient` is auto-imported from your composable:
 
 ```typescript
 export default defineNuxtRouteMiddleware(async (to) => {
-  const { data: session } = await useFetch("/api/auth/get-session", {
-    headers: useRequestHeaders(),
-    default: () => null,
-  });
+  const { data: session } = await authClient.useSession(useFetch);
 
   const protectedRoutes = ["/dashboard", "/settings", "/profile"];
   const isProtected = protectedRoutes.some((route) =>
@@ -452,7 +449,52 @@ export default defineNuxtRouteMiddleware(async (to) => {
 });
 ```
 
-This middleware calls Better Auth's session endpoint directly via `useFetch`. We pass `useRequestHeaders()` so that cookies are forwarded during SSR, and `default: () => null` to avoid Nuxt's SSR warning about undefined return values. The middleware does two things: it redirects unauthenticated users away from protected pages, and it redirects authenticated users away from the login and registration pages.
+The middleware does two things: it redirects unauthenticated users away from protected pages, and it redirects authenticated users away from the login and registration pages.
+
+Alternately, we could create 2 named middlewares, one for protected routes and one for auth routes.
+
+```typescript
+// middleware/auth.ts
+export default defineNuxtRouteMiddleware(async (to) => {
+  const { data: session } = await authClient.useSession(useFetch);
+
+  if (!session.value) {
+    return navigateTo("/login");
+  }
+});
+```
+
+```typescript
+// middleware/guest.ts
+export default defineNuxtRouteMiddleware(async (to) => {
+  const { data: session } = await authClient.useSession(useFetch);
+
+  if (session.value) {
+    return navigateTo("/dashboard");
+  }
+});
+```
+
+And then register these middleware on the respective pages with `definePageMeta`:
+
+```html
+<!-- pages/dashboard.vue -->
+<script setup lang="ts">
+  definePageMeta({
+    middleware: ["auth"],
+  });
+</script>
+```
+
+```html
+<!-- pages/login.vue -->
+<!-- pages/register.vue -->
+<script setup lang="ts">
+  definePageMeta({
+    middleware: ["guest"],
+  });
+</script>
+```
 
 ## Adding Social Login
 
@@ -487,16 +529,22 @@ GITHUB_CLIENT_ID=your-github-client-id
 GITHUB_CLIENT_SECRET=your-github-client-secret
 ```
 
+(Alternatviely, you could also use runtime config variables instead of reaching for process.env directly)
+
 To get these credentials, create an OAuth App in your [GitHub Developer Settings](https://github.com/settings/developers). Set the **Authorization callback URL** to `http://localhost:3000/api/auth/callback/github`. Until these are set, the “Continue with GitHub” button will redirect to GitHub but the callback will fail; the email/password flow is unaffected.
+
+![GitHub Developer Settings](./images/github-developer-settings.png)
 
 ### Client Usage
 
-Add a social sign-in button to your login page (and optionally the register page) using Nuxt UI's `UButton`. Place it above the email/password form with a visual “or” divider so users can choose GitHub or email. For OAuth, `callbackURL` is correct — it’s where users land after GitHub redirects back (unlike email/password, where you use `navigateTo` on success).
+Add a social sign-in button to your login page (and optionally the register page) using Nuxt UI's `UButton`. Place it above the email/password form with a visual “or” divider so users can choose GitHub or email.
+
+![GitHub Login Button](./images/github-login-button.jpg)
+
+For OAuth, `callbackURL` is correct — it’s where users land after GitHub redirects back (unlike email/password, where you use `navigateTo` on success).
 
 ```html
 <script setup lang="ts">
-  import { authClient } from "~/lib/auth-client";
-
   function signInWithGitHub() {
     authClient.signIn.social({
       provider: "github",
@@ -531,23 +579,25 @@ Add a social sign-in button to your login page (and optionally the register page
 </template>
 ```
 
-Use the icon `i-simple-icons-github` (GitHub logo from [Simple Icons](https://icon-sets.iconify.design/simple-icons/)); if you use [Lucide](https://icon-sets.iconify.design/lucide/) (`npm i -D @iconify-json/lucide`), you can use `i-lucide-github` instead.
-
 That's it. Better Auth handles the full OAuth flow — redirecting to GitHub, exchanging the authorization code for tokens, creating or linking the user account, and establishing the session. Add the same button and `signInWithGitHub` handler to your register page so users can sign up with GitHub as well.
 
 Adding another provider like Google follows the same pattern:
 
 ```typescript
-socialProviders: {
-  github: {
-    clientId: process.env.GITHUB_CLIENT_ID as string,
-    clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
+// server/utils/auth.ts
+betterAuth({
+  // ...
+  socialProviders: {
+    github: {
+      clientId: process.env.GITHUB_CLIENT_ID as string,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
+    },
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID as string,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+    },
   },
-  google: {
-    clientId: process.env.GOOGLE_CLIENT_ID as string,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-  },
-},
+});
 ```
 
 ## Extending with Plugins
@@ -597,7 +647,7 @@ npx @better-auth/cli migrate --config ./server/utils/auth.ts
 
 #### Step 3: Auth client plugin
 
-In `lib/auth-client.ts`, add `twoFactorClient` and set `onTwoFactorRedirect` so that when a user with 2FA signs in, they are sent to your verification page:
+In `composables/auth-client.ts`, add `twoFactorClient` and set `onTwoFactorRedirect` so that when a user with 2FA signs in, they are sent to your verification page:
 
 ```typescript
 import { createAuthClient } from "better-auth/vue";
@@ -628,8 +678,6 @@ Here's the code for the page:
 
 ```html
 <script setup lang="ts">
-  import { authClient } from "~/lib/auth-client";
-
   const code = ref("");
   const backupCode = ref("");
   const useBackupCode = ref(false);
@@ -794,6 +842,10 @@ Here's the code for the page:
 </template>
 ```
 
+![Two-factor page with Send code button](./images/send-code.jpg)
+
+![Two-factor page with verification code input](./images/verify-code.jpg)
+
 #### Step 5: Dashboard 2FA UI
 
 Now we need a way to enable and disable 2FA for a user. In this project, we can do it on the dashboard page. In your own project, of course, you can do it wherever you want.
@@ -804,8 +856,6 @@ Let's walk through the code for the dashboard page and see how to integrate with
 
 ```html
 <script setup lang="ts">
-  import { authClient } from "~/lib/auth-client";
-
   const session = authClient.useSession();
 
   // --- 2FA state ---
@@ -985,6 +1035,10 @@ Sign-out button in the card footer should call `handleSignOut()` so `sessionStor
 </template>
 ```
 
+![Dashboard with Two-Factor Authentication section](./images/2fa-dashboard.jpg)
+
+![Backup codes shown after enabling 2FA](./images/backup-codes.jpg)
+
 This gives you a full OTP-based 2FA flow: enable and disable on the dashboard, redirect to `/two-factor` after sign-in when 2FA is on, send OTP (console in dev), verify code or backup code, then continue to the app. Two-factor applies only to credential (email/password) accounts; social logins rely on the provider's own 2FA.
 
 ### Other Notable Plugins
@@ -1070,7 +1124,7 @@ The key pieces we covered:
 1. **Nuxt UI** for consistent forms and UI (UCard, UFormField, UInput, UButton, UAlert)
 2. **Server auth instance** at `server/utils/auth.ts` with database and auth method configuration
 3. **Catch-all API route** at `server/api/auth/[...all].ts` to handle all auth endpoints
-4. **Vue client** at `lib/auth-client.ts` with reactive session management
+4. **Vue client** at `composables/auth-client.ts` (auto-imported) with reactive session management
 5. **Route protection** with Nuxt middleware
 6. **Social login** with minimal configuration
 7. **Plugin system** for extending functionality
