@@ -22,6 +22,11 @@ export const auth = betterAuth({
       skipVerificationOnEnable: true,
       otpOptions: {
         async sendOTP({ user, otp }) {
+          return await useEmail().send({
+            to: user.email,
+            subject: "2FA OTP for Nuxt Better Auth Demo",
+            body: `Your 2FA code is: ${otp}`,
+          });
           console.log("[2FA OTP]", user.email, "→ Code:", otp);
         },
       },
