@@ -26,10 +26,14 @@ async function handleVerify() {
   error.value = "";
   loading.value = true;
 
-  const toVerify = useBackupCode.value ? backupCode.value.trim() : code.value.replace(/\s/g, "");
+  const toVerify = useBackupCode.value
+    ? backupCode.value.trim()
+    : code.value.replace(/\s/g, "");
 
   if (!toVerify) {
-    error.value = useBackupCode.value ? "Enter a backup code" : "Enter the code";
+    error.value = useBackupCode.value
+      ? "Enter a backup code"
+      : "Enter the code";
     loading.value = false;
     return;
   }
@@ -81,7 +85,8 @@ async function handleVerify() {
 
         <template v-if="!codeSent && !useBackupCode">
           <p class="text-sm text-muted">
-            Click below to send a one-time code. In development the code is logged to the server console.
+            Click below to send a one-time code. In development the code is
+            logged to the server console.
           </p>
           <UButton
             type="button"
@@ -107,7 +112,7 @@ async function handleVerify() {
             />
           </UFormField>
           <p class="text-xs text-muted">
-            Check the terminal where <code>nr dev</code> is running for the code.
+            I've updated the demo to send to your actual email, so check there.
           </p>
         </template>
 
@@ -144,9 +149,18 @@ async function handleVerify() {
             variant="link"
             size="sm"
             class="p-0"
-            @click="useBackupCode = !useBackupCode; codeSent = false; code = ''; backupCode = ''"
+            @click="
+              useBackupCode = !useBackupCode;
+              codeSent = false;
+              code = '';
+              backupCode = '';
+            "
           >
-            {{ useBackupCode ? "Send one-time code instead" : "Use a backup code instead" }}
+            {{
+              useBackupCode
+                ? "Send one-time code instead"
+                : "Use a backup code instead"
+            }}
           </UButton>
         </p>
       </form>
