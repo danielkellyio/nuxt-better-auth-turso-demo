@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { twoFactor } from "better-auth/plugins";
 import Database from "better-sqlite3";
 
 const hasGitHub =
@@ -6,9 +7,20 @@ const hasGitHub =
 
 export const auth = betterAuth({
   database: new Database("./sqlite.db"),
+  appName: "Nuxt Better Auth",
   emailAndPassword: {
     enabled: true,
   },
+  plugins: [
+    twoFactor({
+      skipVerificationOnEnable: true,
+      otpOptions: {
+        async sendOTP({ user, otp }) {
+          console.log("[2FA OTP]", user.email, "→ Code:", otp);
+        },
+      },
+    }),
+  ],
   ...(hasGitHub && {
     socialProviders: {
       github: {

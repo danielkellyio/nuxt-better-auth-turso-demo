@@ -554,31 +554,50 @@ socialProviders: {
 
 Better Auth's plugin system is where it really shines. Plugins extend both the server and client APIs with full type safety — once you add a plugin, its methods appear in autocomplete without any extra configuration.
 
-### Two-Factor Authentication
+### Two-Factor Authentication (OTP)
 
-Adding 2FA is a good example of how plugins work. First, add the plugin to your server auth instance:
+Adding 2FA is a good example of how plugins work. Here we use **OTP** (one-time password): the server generates a code and "sends" it somewhere you define; for development we log it to the server console. You can later switch to email or SMS by changing the `sendOTP` implementation. Better Auth also supports **TOTP** (authenticator apps like Google Authenticator); see the [2FA plugin documentation](https://better-auth.com/docs/plugins/2fa) to set up TOTP instead or in addition.
+
+#### Step 1: Server plugin
+
+Add the `twoFactor` plugin to your existing auth config in `server/utils/auth.ts`. Use `skipVerificationOnEnable: true` (so users don't have to verify a TOTP code when enabling) and `otpOptions.sendOTP` to define where the one-time code goes — for development, log it to the server console:
 
 ```typescript
 import { betterAuth } from "better-auth";
 import { twoFactor } from "better-auth/plugins";
 import Database from "better-sqlite3";
 
+// ... any existing hasGitHub etc.
+
 export const auth = betterAuth({
   database: new Database("./sqlite.db"),
-  emailAndPassword: {
-    enabled: true,
-  },
-  plugins: [twoFactor()],
+  appName: "Nuxt Better Auth",
+  emailAndPassword: { enabled: true },
+  plugins: [
+    twoFactor({
+      skipVerificationOnEnable: true,
+      otpOptions: {
+        async sendOTP({ user, otp }) {
+          console.log("[2FA OTP]", user.email, "→ Code:", otp);
+        },
+      },
+    }),
+  ],
+  // ... rest of config (e.g. socialProviders)
 });
 ```
 
-Run the migration to create the required table:
+#### Step 2: Migration
+
+Run the migration so the `twoFactor` table and user fields exist:
 
 ```bash
 npx @better-auth/cli migrate --config ./server/utils/auth.ts
 ```
 
-Then add the client plugin to `lib/auth-client.ts`:
+#### Step 3: Auth client plugin
+
+In `lib/auth-client.ts`, add `twoFactorClient` and set `onTwoFactorRedirect` so that when a user with 2FA signs in, they are sent to your verification page:
 
 ```typescript
 import { createAuthClient } from "better-auth/vue";
@@ -587,17 +606,390 @@ import { twoFactorClient } from "better-auth/client/plugins";
 export const authClient = createAuthClient({
   plugins: [
     twoFactorClient({
-      twoFactorPage: "/two-factor",
+      onTwoFactorRedirect() {
+        window.location.href = "/two-factor";
+      },
     }),
   ],
 });
 ```
 
-Now the client exposes methods like `authClient.twoFactor.enable()`, `authClient.twoFactor.disable()`, and `authClient.twoFactor.verifyTOTP()`. If a user with 2FA enabled signs in, they're automatically redirected to the page you specified in `twoFactorPage`.
+#### Step 4: Two-factor verification page
+
+Create `pages/two-factor.vue`. The flow is:
+
+1. User lands here after signing in with 2FA enabled.
+2. Show a **"Send code"** button that calls `authClient.twoFactor.sendOtp({})`. Your server `sendOTP` runs (and in dev logs the code to the terminal).
+3. After sending, show an input for the verification code and a **"Trust this device for 30 days"** checkbox.
+4. On submit, call `authClient.twoFactor.verifyOtp({ code, trustDevice })` (or `authClient.twoFactor.verifyBackupCode({ code, trustDevice })` if they chose backup code).
+5. On success, redirect to `/dashboard` (e.g. `window.location.href = "/dashboard"`).
+
+Here's the code for the page:
+
+```html
+<script setup lang="ts">
+  import { authClient } from "~/lib/auth-client";
+
+  const code = ref("");
+  const backupCode = ref("");
+  const useBackupCode = ref(false);
+  const error = ref("");
+  const loading = ref(false);
+  const sendOtpLoading = ref(false);
+  const codeSent = ref(false);
+  const trustDevice = ref(true);
+
+  async function handleSendOtp() {
+    error.value = "";
+    sendOtpLoading.value = true;
+    const { data, error: sendError } = await authClient.twoFactor.sendOtp({});
+    sendOtpLoading.value = false;
+    if (sendError) {
+      error.value = sendError.message ?? "Failed to send code";
+      return;
+    }
+    if (data) {
+      codeSent.value = true;
+    }
+  }
+
+  async function handleVerify() {
+    error.value = "";
+    loading.value = true;
+
+    const toVerify = useBackupCode.value
+      ? backupCode.value.trim()
+      : code.value.replace(/\s/g, "");
+
+    if (!toVerify) {
+      error.value = useBackupCode.value
+        ? "Enter a backup code"
+        : "Enter the code";
+      loading.value = false;
+      return;
+    }
+
+    if (useBackupCode.value) {
+      const { error: verifyError } =
+        await authClient.twoFactor.verifyBackupCode({
+          code: toVerify,
+          trustDevice: trustDevice.value,
+        });
+      if (verifyError) {
+        error.value = verifyError.message ?? "Invalid backup code";
+        loading.value = false;
+        return;
+      }
+    } else {
+      const { error: verifyError } = await authClient.twoFactor.verifyOtp({
+        code: toVerify,
+        trustDevice: trustDevice.value,
+      });
+      if (verifyError) {
+        error.value = verifyError.message ?? "Invalid code";
+        loading.value = false;
+        return;
+      }
+    }
+
+    window.location.href = "/dashboard";
+  }
+</script>
+
+<template>
+  <div class="flex min-h-screen items-center justify-center p-4">
+    <UCard class="w-full max-w-md">
+      <template #header>
+        <h1 class="text-xl font-semibold">Two-Factor Authentication</h1>
+        <p class="text-sm text-muted mt-1">
+          Request a one-time code or use a backup code.
+        </p>
+      </template>
+
+      <form class="space-y-4" @submit.prevent="handleVerify">
+        <UAlert
+          v-if="error"
+          color="error"
+          variant="soft"
+          :description="error"
+          icon="i-lucide-circle-alert"
+        />
+
+        <template v-if="!codeSent && !useBackupCode">
+          <p class="text-sm text-muted">
+            Click below to send a one-time code. In development the code is
+            logged to the server console.
+          </p>
+          <UButton
+            type="button"
+            block
+            size="md"
+            :loading="sendOtpLoading"
+            @click="handleSendOtp"
+          >
+            {{ sendOtpLoading ? "Sending..." : "Send code" }}
+          </UButton>
+        </template>
+
+        <template v-else-if="!useBackupCode">
+          <UFormField label="Verification code" required>
+            <UInput
+              v-model="code"
+              type="text"
+              inputmode="numeric"
+              placeholder="Enter the code"
+              size="md"
+              maxlength="6"
+              autocomplete="one-time-code"
+            />
+          </UFormField>
+          <p class="text-xs text-muted">
+            Check the terminal where <code>nr dev</code> is running for the
+            code.
+          </p>
+        </template>
+
+        <template v-else>
+          <UFormField label="Backup code" required>
+            <UInput
+              v-model="backupCode"
+              type="text"
+              placeholder="Enter a backup code"
+              size="md"
+              autocomplete="one-time-code"
+            />
+          </UFormField>
+        </template>
+
+        <label class="flex items-center gap-2 cursor-pointer text-sm">
+          <UCheckbox v-model="trustDevice" />
+          <span>Trust this device for 30 days</span>
+        </label>
+
+        <UButton
+          v-if="codeSent || useBackupCode"
+          type="submit"
+          block
+          size="md"
+          :loading="loading"
+          :trailing="false"
+        >
+          {{ loading ? "Verifying..." : "Verify" }}
+        </UButton>
+
+        <p class="text-center text-sm text-muted">
+          <UButton
+            variant="link"
+            size="sm"
+            class="p-0"
+            @click="useBackupCode = !useBackupCode; codeSent = false; code = ''; backupCode = ''"
+          >
+            {{ useBackupCode ? "Send one-time code instead" : "Use a backup code
+            instead" }}
+          </UButton>
+        </p>
+      </form>
+    </UCard>
+  </div>
+</template>
+```
+
+#### Step 5: Dashboard 2FA UI
+
+Now we need a way to enable and disable 2FA for a user. In this project, we can do it on the dashboard page. In your own project, of course, you can do it wherever you want.
+
+Let's walk through the code for the dashboard page and see how to integrate with the 2FA func
+
+**Script Section: session, has2FA, and 2FA handlers**
+
+```html
+<script setup lang="ts">
+  import { authClient } from "~/lib/auth-client";
+
+  const session = authClient.useSession();
+
+  // --- 2FA state ---
+  const twoFactorPassword = ref("");
+  const twoFactorError = ref("");
+  const twoFactorLoading = ref(false);
+  const enableResult = ref<{ backupCodes: string[] } | null>(null);
+  const disablePassword = ref("");
+  const disableError = ref("");
+  const disableLoading = ref(false);
+
+  // useSession() returns a Ref<{ data: { user, session }, isPending, ... }>
+  const sessionRef = session as Ref<{
+    data?: { user?: { twoFactorEnabled?: boolean } } | null;
+  }>;
+  const user = computed(() => sessionRef.value?.data?.user);
+
+  // 2FA is "on" if the session says so, we just enabled it (enableResult), or we stored it in sessionStorage
+  // (session may not return twoFactorEnabled immediately; sessionStorage survives until disable/sign out)
+  const has2FA = computed(
+    () =>
+      !!user.value?.twoFactorEnabled ||
+      !!enableResult.value ||
+      (import.meta.client && sessionStorage.getItem("2fa-enabled") === "true"),
+  );
+
+  // Clear 2fa-enabled before sign out so the next user doesn't see 2FA as enabled
+  async function handleSignOut() {
+    if (import.meta.client) {
+      sessionStorage.removeItem("2fa-enabled");
+    }
+    await authClient.signOut();
+    navigateTo("/login");
+  }
+
+  // Enable 2FA: password → enable() → backup codes; then persist "2fa-enabled" and show success UI
+  async function startEnable2FA() {
+    if (!twoFactorPassword.value) {
+      twoFactorError.value = "Enter your password";
+      return;
+    }
+    twoFactorError.value = "";
+    twoFactorLoading.value = true;
+    const { data, error } = await authClient.twoFactor.enable({
+      password: twoFactorPassword.value,
+    });
+    twoFactorLoading.value = false;
+    if (error) {
+      twoFactorError.value = error.message ?? "Failed to enable 2FA";
+      return;
+    }
+    if (data?.backupCodes) {
+      enableResult.value = { backupCodes: data.backupCodes };
+      twoFactorPassword.value = "";
+      if (import.meta.client) {
+        sessionStorage.setItem("2fa-enabled", "true");
+      }
+    }
+  }
+
+  // After showing backup codes, "Done" clears state and reloads so the UI shows "2FA is enabled"
+  function dismissEnableSuccess() {
+    enableResult.value = null;
+    window.location.reload();
+  }
+
+  // Disable 2FA: password → disable() → clear sessionStorage and reload
+  async function handleDisable2FA() {
+    if (!disablePassword.value) {
+      disableError.value = "Enter your password";
+      return;
+    }
+    disableError.value = "";
+    disableLoading.value = true;
+    const { error } = await authClient.twoFactor.disable({
+      password: disablePassword.value,
+    });
+    disableLoading.value = false;
+    if (error) {
+      disableError.value = error.message ?? "Failed to disable 2FA";
+      return;
+    }
+    disablePassword.value = "";
+    if (import.meta.client) {
+      sessionStorage.removeItem("2fa-enabled");
+    }
+    window.location.reload();
+  }
+</script>
+```
+
+**Template: 2FA block and sign out**
+
+Inside your dashboard card, add a section that branches on `has2FA` and `enableResult`:
+
+- **When 2FA is enabled:** show a short message and the disable form (password + "Disable 2FA" button).
+- **When 2FA is off and not just enabled:** show the enable form (password + "Enable 2FA" button).
+- **When `enableResult` is set:** show "2FA enabled with OTP", list `enableResult.backupCodes`, and a "Done" button that calls `dismissEnableSuccess()`.
+
+Sign-out button in the card footer should call `handleSignOut()` so `sessionStorage.removeItem("2fa-enabled")` runs before signing out.
+
+```html
+<!-- Inside the dashboard card, after welcome message: -->
+<div class="border-t border-default pt-4 space-y-4">
+  <h2 class="font-medium">Two-Factor Authentication</h2>
+  <p v-if="has2FA" class="text-sm text-muted">
+    2FA is enabled. You will be asked for a code when signing in.
+  </p>
+  <p v-else class="text-sm text-muted">
+    Add an extra layer of security by enabling 2FA.
+  </p>
+
+  <template v-if="enableResult">
+    <!-- Just enabled: show backup codes and Done -->
+    <p class="text-sm font-medium text-green-600 dark:text-green-400">
+      2FA enabled with OTP.
+    </p>
+    <p class="text-sm text-muted">Save your backup codes:</p>
+    <ul class="text-sm text-muted list-disc list-inside">
+      <li v-for="(c, i) in enableResult.backupCodes" :key="i">{{ c }}</li>
+    </ul>
+    <UButton block size="md" @click="dismissEnableSuccess">Done</UButton>
+  </template>
+  <template v-else-if="!has2FA">
+    <!-- Enable form: password + Enable 2FA -->
+    <UFormField label="Your password" required>
+      <UInput
+        v-model="twoFactorPassword"
+        type="password"
+        placeholder="Password"
+        @keydown.enter="startEnable2FA"
+      />
+    </UFormField>
+    <UAlert
+      v-if="twoFactorError"
+      color="error"
+      variant="soft"
+      :description="twoFactorError"
+    />
+    <UButton block size="md" :loading="twoFactorLoading" @click="startEnable2FA"
+      >Enable 2FA</UButton
+    >
+  </template>
+  <template v-else>
+    <!-- Disable form: password + Disable 2FA -->
+    <UFormField label="Your password" required>
+      <UInput
+        v-model="disablePassword"
+        type="password"
+        placeholder="Password to disable 2FA"
+        @keydown.enter="handleDisable2FA"
+      />
+    </UFormField>
+    <UAlert
+      v-if="disableError"
+      color="error"
+      variant="soft"
+      :description="disableError"
+    />
+    <UButton
+      block
+      size="md"
+      color="error"
+      variant="outline"
+      :loading="disableLoading"
+      @click="handleDisable2FA"
+      >Disable 2FA</UButton
+    >
+  </template>
+</div>
+
+<!-- Footer: sign out clears sessionStorage then signs out -->
+<template #footer>
+  <UButton color="neutral" variant="outline" block @click="handleSignOut"
+    >Sign Out</UButton
+  >
+</template>
+```
+
+This gives you a full OTP-based 2FA flow: enable and disable on the dashboard, redirect to `/two-factor` after sign-in when 2FA is on, send OTP (console in dev), verify code or backup code, then continue to the app. Two-factor applies only to credential (email/password) accounts; social logins rely on the provider's own 2FA.
 
 ### Other Notable Plugins
 
-The plugin ecosystem covers a wide range of authentication needs:
+While the 2FA plugin is awesome in its own right, there are plenty of other plugins that are worth checking out.
 
 | Plugin           | What It Does                                   |
 | ---------------- | ---------------------------------------------- |
@@ -679,10 +1071,9 @@ The key pieces we covered:
 2. **Server auth instance** at `server/utils/auth.ts` with database and auth method configuration
 3. **Catch-all API route** at `server/api/auth/[...all].ts` to handle all auth endpoints
 4. **Vue client** at `lib/auth-client.ts` with reactive session management
-5. **SSR-safe sessions** by passing `useFetch` to `useSession`
-6. **Route protection** with Nuxt middleware
-7. **Social login** with minimal configuration
-8. **Plugin system** for extending functionality
+5. **Route protection** with Nuxt middleware
+6. **Social login** with minimal configuration
+7. **Plugin system** for extending functionality
 
 For further reading, the [Better Auth documentation](https://better-auth.com/docs) is thorough and well-organized. The [official Nuxt example](https://stackblitz.com/github/better-auth/examples/tree/main/nuxt-example) on StackBlitz is a good hands-on starting point, and [Sébastien Chopin's NuxtHub + Better Auth demo](https://github.com/atinux/nuxthub-better-auth) shows how the setup works with Cloudflare D1 and KV for edge deployment.
 
