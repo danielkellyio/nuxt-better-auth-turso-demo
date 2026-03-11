@@ -26,6 +26,8 @@ async function handleSignOut() {
     sessionStorage.removeItem("2fa-enabled");
   }
   await authClient.signOut();
+  // Invalidate cached session so middleware's useSession(useFetch) refetches
+  await clearNuxtData();
   navigateTo("/login");
 }
 

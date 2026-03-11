@@ -1,75 +1,32 @@
-# Nuxt Minimal Starter
+# Nuxt Better Auth Template
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+A Nuxt 4 app with [Better Auth](https://better-auth.com/) for authentication: email/password sign-up, social login (e.g. GitHub), SSR-safe sessions, protected routes, and optional plugins (2FA, organizations, etc.). Uses Nuxt UI, Tailwind, and SQLite (via Turso/libSQL).
 
 ## Setup
 
-Make sure to install dependencies:
-
 ```bash
-# npm
-npm install
-
-# pnpm
 pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
 ```
 
-## Development Server
-
-Start the development server on `http://localhost:3000`:
+Set `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` in `.env`, then run migrations:
 
 ```bash
-# npm
-npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
+pnpm run better-auth:migrate
 ```
+
+## Development
+
+```bash
+pnpm run dev
+```
+
+Runs at `http://localhost:3000`.
 
 ## Production
 
-Build the application for production:
-
 ```bash
-# npm
-npm run build
-
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
+pnpm run build
+pnpm run preview
 ```
 
-Locally preview production build:
-
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+See the [Nuxt deployment docs](https://nuxt.com/docs/getting-started/deployment) for deployment options.

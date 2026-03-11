@@ -1,5 +1,4 @@
 <script setup lang="ts">
-const name = ref("");
 const email = ref("");
 const password = ref("");
 const error = ref("");
@@ -12,22 +11,23 @@ function signInWithGitHub() {
   });
 }
 
-async function handleSignUp() {
+async function handleSignIn() {
   error.value = "";
   loading.value = true;
 
-  const { error: signUpError } = await authClient.signUp.email({
-    name: name.value,
+  const { error: signInError } = await authClient.signIn.email({
     email: email.value,
     password: password.value,
   });
 
-  if (signUpError) {
-    error.value = signUpError.message ?? "Something went wrong";
+  if (signInError) {
+    error.value = signInError.message ?? "Invalid credentials";
     loading.value = false;
     return;
   }
 
+  // Invalidate cached session so middleware's useSession(useFetch) refetches
+  await clearNuxtData();
   navigateTo("/dashboard");
 }
 </script>
@@ -36,7 +36,7 @@ async function handleSignUp() {
   <div class="flex min-h-screen items-center justify-center p-4">
     <UCard class="w-full max-w-md">
       <template #header>
-        <h1 class="text-xl font-semibold">Create an Account</h1>
+        <h1 class="text-xl font-semibold">Sign In</h1>
       </template>
 
       <div class="space-y-4">
@@ -56,12 +56,12 @@ async function handleSignUp() {
             <span class="w-full border-t border-default" />
           </div>
           <div class="relative flex justify-center text-xs uppercase">
-            <span class="bg-card px-2 text-muted">or</span>
+            <span class="bg-default px-2 text-muted">or</span>
           </div>
         </div>
       </div>
 
-      <form class="space-y-4 mt-4" @submit.prevent="handleSignUp">
+      <form class="space-y-4 mt-4" @submit.prevent="handleSignIn">
         <UAlert
           v-if="error"
           color="error"
@@ -69,16 +69,6 @@ async function handleSignUp() {
           :description="error"
           icon="i-lucide-circle-alert"
         />
-
-        <UFormField label="Name" required>
-          <UInput
-            v-model="name"
-            type="text"
-            placeholder="Your name"
-            size="md"
-            required
-          />
-        </UFormField>
 
         <UFormField label="Email" required>
           <UInput
@@ -94,7 +84,7 @@ async function handleSignUp() {
           <UInput
             v-model="password"
             type="password"
-            placeholder="At least 8 characters"
+            placeholder="Your password"
             size="md"
             required
           />
@@ -107,15 +97,15 @@ async function handleSignUp() {
           :loading="loading"
           :trailing="false"
         >
-          {{ loading ? "Creating account..." : "Sign Up" }}
+          {{ loading ? "Signing in..." : "Sign In" }}
         </UButton>
       </form>
 
       <template #footer>
         <p class="text-center text-sm text-muted">
-          Already have an account?
-          <UButton to="/login" variant="link" size="sm" class="p-0">
-            Sign in
+          Don't have an account?
+          <UButton to="/register" variant="link" size="sm" class="p-0">
+            Sign up
           </UButton>
         </p>
       </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const name = ref("");
 const email = ref("");
 const password = ref("");
 const error = ref("");
@@ -11,17 +12,18 @@ function signInWithGitHub() {
   });
 }
 
-async function handleSignIn() {
+async function handleSignUp() {
   error.value = "";
   loading.value = true;
 
-  const { error: signInError } = await authClient.signIn.email({
+  const { error: signUpError } = await authClient.signUp.email({
+    name: name.value,
     email: email.value,
     password: password.value,
   });
 
-  if (signInError) {
-    error.value = signInError.message ?? "Invalid credentials";
+  if (signUpError) {
+    error.value = signUpError.message ?? "Something went wrong";
     loading.value = false;
     return;
   }
@@ -34,7 +36,7 @@ async function handleSignIn() {
   <div class="flex min-h-screen items-center justify-center p-4">
     <UCard class="w-full max-w-md">
       <template #header>
-        <h1 class="text-xl font-semibold">Sign In</h1>
+        <h1 class="text-xl font-semibold">Create an Account</h1>
       </template>
 
       <div class="space-y-4">
@@ -54,12 +56,12 @@ async function handleSignIn() {
             <span class="w-full border-t border-default" />
           </div>
           <div class="relative flex justify-center text-xs uppercase">
-            <span class="bg-card px-2 text-muted">or</span>
+            <span class="bg-default px-2 text-muted">or</span>
           </div>
         </div>
       </div>
 
-      <form class="space-y-4 mt-4" @submit.prevent="handleSignIn">
+      <form class="space-y-4 mt-4" @submit.prevent="handleSignUp">
         <UAlert
           v-if="error"
           color="error"
@@ -67,6 +69,16 @@ async function handleSignIn() {
           :description="error"
           icon="i-lucide-circle-alert"
         />
+
+        <UFormField label="Name" required>
+          <UInput
+            v-model="name"
+            type="text"
+            placeholder="Your name"
+            size="md"
+            required
+          />
+        </UFormField>
 
         <UFormField label="Email" required>
           <UInput
@@ -82,7 +94,7 @@ async function handleSignIn() {
           <UInput
             v-model="password"
             type="password"
-            placeholder="Your password"
+            placeholder="At least 8 characters"
             size="md"
             required
           />
@@ -95,15 +107,15 @@ async function handleSignIn() {
           :loading="loading"
           :trailing="false"
         >
-          {{ loading ? "Signing in..." : "Sign In" }}
+          {{ loading ? "Creating account..." : "Sign Up" }}
         </UButton>
       </form>
 
       <template #footer>
         <p class="text-center text-sm text-muted">
-          Don't have an account?
-          <UButton to="/register" variant="link" size="sm" class="p-0">
-            Sign up
+          Already have an account?
+          <UButton to="/login" variant="link" size="sm" class="p-0">
+            Sign in
           </UButton>
         </p>
       </template>

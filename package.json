@@ -19,15 +19,14 @@
   },
   "dependencies": {
     "@libsql/kysely-libsql": "^0.4.1",
-    "@nuxt/eslint": "1.15.2",
-    "@nuxt/ui": "3.3.7",
-    "better-auth": "^1.5.4",
+    "@nuxt/eslint": "^1.15.2",
+    "@nuxt/ui": "^4.5.1",
+    "better-auth": "^1.5.5",
     "eslint": "^9.39.4",
-    "nuxt": "^3.21.1",
+    "nuxt": "^4.3.1",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
     "vue": "^3.5.30",
     "vue-router": "^4.6.4"
-  },
-  "devDependencies": {}
+  }
 }
